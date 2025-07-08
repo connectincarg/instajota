@@ -4,27 +4,27 @@ const fetch = require('node-fetch');
 const USER  = 'radiojotafm';
 
 (async () => {
-  // 1) Descagar HTML
+  // 1) Descarga HTML
   const res  = await fetch(`https://www.instagram.com/${USER}/`, {
     headers: { 'User-Agent': 'Mozilla/5.0' }
   });
   const html = await res.text();
 
-  // 2) Extraer JSON de __NEXT_DATA__
-  const m = html.match(
-    /<script id="__NEXT_DATA__" type="application\/json">(.+?)<\/script>/s
+  // 2) Extrae JSON de window.__additionalDataLoaded
+  const re = new RegExp(
+    `window\\.__additionalDataLoaded\\('/${USER}/',\\s*(${  
+      '{[\\s\\S]*?}'  
+    })\\);`
   );
-  if (!m) throw new Error('No se encontró __NEXT_DATA__');
+  const m = html.match(re);
+  if (!m) throw new Error('No se encontró additionalDataLoaded');
   const data = JSON.parse(m[1]);
 
-  // 3) Buscar edges dentro de props
-  const props = data.props?.pageProps || data.props?.apolloState || {};
-  const user  = props.graphql?.user 
-             || props.user 
-             || {};
-  const edges = user.edge_owner_to_timeline_media?.edges || [];
+  // 3) Llegar a los edges
+  const edges =
+    data?.graphql?.user?.edge_owner_to_timeline_media?.edges || [];
 
-  // 4) Mapear primeros 8 posts
+  // 4) Mapear 8 posts
   const posts = edges.slice(0, 8).map(e => {
     const n = e.node;
     return {
@@ -32,15 +32,13 @@ const USER  = 'radiojotafm';
       thumb:   n.display_url || n.thumbnail_src,
       caption: n.edge_media_to_caption?.edges[0]?.node?.text || '',
       type:    n.is_video ? 'video' : 'image',
-      video:   n.is_video ? n.video_url || '' : ''
+      video:   n.is_video ? (n.video_url || '') : ''
     };
   });
 
   // 5) Escribir ig_posts.json
-  fs.writeFileSync(
-    'ig_posts.json',
-    JSON.stringify({ posts }, null, 2)
-  );
+  fs.writeFileSync('ig_posts.json', JSON.stringify({ posts }, null, 2));
+  console.log('✔ ig_posts.json actualizado');
 })().catch(err => {
   console.error('SCRAPER ERROR:', err.message);
   process.exit(1);
